@@ -39,6 +39,7 @@ import { adminRouter } from './routes/admin.js';
 import { licenseRouter } from './routes/license.js';
 import { hrRouter } from './routes/hr.js';
 import { publicRouter } from './routes/public.js';
+import { equipmentRouter } from './routes/equipment.js';
 
 const app = express();
 app.use(cors());
@@ -88,6 +89,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/license', licenseRouter);
 app.use('/api/hr', hrRouter);
 app.use('/api/public', publicRouter);
+app.use('/api/equipment', equipmentRouter);
 app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()

@@ -47,6 +47,40 @@ roomsRouter.delete('/categories/:id', asyncHandler(async (req, res) => {
   res.status(204).end();
 }));
 
+// -- CRUD brut sur logistic_rooms (Logistics.tsx) — GET / ci-dessous renvoie
+// la vue jointe (fetchRooms), utilisée par Hospitalizations.tsx.
+
+const LOGISTIC_ROOM_COLUMNS = ['id', 'structure_id', 'category_id', 'number', 'floor', 'department', 'status', 'beds', 'notes'] as const;
+
+roomsRouter.get('/raw', asyncHandler(async (req, res) => {
+  const { structureId } = req.query as { structureId?: string };
+  if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
+  const rows = await withUserContext(req.authUser!, (client) =>
+    client.query('SELECT * FROM logistic_rooms WHERE structure_id = $1 ORDER BY created_at', [structureId])
+      .then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+roomsRouter.post('/raw', asyncHandler(async (req, res) => {
+  const row = await withUserContext(req.authUser!, async (client) => {
+    const insert = buildInsert('logistic_rooms', LOGISTIC_ROOM_COLUMNS, req.body);
+    const { rows } = await client.query(insert.text, insert.values);
+    return rows[0];
+  });
+  res.status(201).json(row);
+}));
+
+roomsRouter.patch('/raw/:id', asyncHandler(async (req, res) => {
+  const row = await withUserContext(req.authUser!, async (client) => {
+    const update = buildUpdate('logistic_rooms', LOGISTIC_ROOM_COLUMNS, req.body, 'id', req.params.id);
+    if (!update) throw Object.assign(new Error('Aucun champ à mettre à jour'), { status: 400 });
+    const { rows } = await client.query(update.text, update.values);
+    return rows[0];
+  });
+  res.json(row);
+}));
+
 roomsRouter.get('/', asyncHandler(async (req, res) => {
   const { structureId } = req.query as { structureId?: string };
   if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
