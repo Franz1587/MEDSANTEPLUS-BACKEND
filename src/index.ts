@@ -4,6 +4,8 @@ import cors from 'cors';
 import { pool } from './db.js';
 import { authRouter } from './routes/auth.js';
 import { patientsRouter } from './routes/patients.js';
+import { invoicesRouter } from './routes/invoices.js';
+import { stockRouter } from './routes/stock.js';
 
 const app = express();
 app.use(cors());
@@ -21,6 +23,8 @@ app.get('/health', async (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/patients', patientsRouter);
+app.use('/api/invoices', invoicesRouter);
+app.use('/api/stock-items', stockRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
 // atterrit ici plutôt que de faire planter le process.
