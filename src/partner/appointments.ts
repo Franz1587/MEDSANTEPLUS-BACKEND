@@ -23,11 +23,16 @@ export async function createAppointmentRequest(ctx: PartnerContext, body: Record
 
   const type = body.type === 'specialist' ? 'specialist' : 'general';
 
+  // ref_number n'a pas de DEFAULT au niveau colonne (ni sur medsanteplus-pg-local,
+  // ni sur supabase-db en production — ce chemin de création n'avait jamais été
+  // exercé en prod, 0 livraisons webhook à ce jour) ; on le génère nous-mêmes
+  // avec la même séquence/format que src/lib/booking-per-clinic.sql.
   const { rows } = await adminPool.query(
     `INSERT INTO booking_requests
-       (structure_id, first_name, last_name, phone, whatsapp, email, type, specialty, reason,
+       (ref_number, structure_id, first_name, last_name, phone, whatsapp, email, type, specialty, reason,
         preferred_date, preferred_time, has_insurance, insurance_name, insurance_policy_number, notify_sms)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,true)
+     VALUES ('RDV-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('booking_ref_seq')::text, 4, '0'),
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,true,$12,$13,true)
      RETURNING id, ref_number, status`,
     [
       structureId, firstName, lastName, phone,
