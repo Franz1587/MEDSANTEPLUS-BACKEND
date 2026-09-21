@@ -23,7 +23,11 @@ interface ClientInfo {
 const clients = new Set<ClientInfo>();
 
 export function attachRealtime(server: HttpServer) {
-  const wss = new WebSocketServer({ server, path: '/realtime' });
+  // Chemin /api/realtime (et non /realtime) : medsanteplus.net sert encore
+  // aujourd'hui /realtime/* vers le Supabase Realtime historique (Caddyfile),
+  // donc /realtime tout court entrerait en collision une fois les deux
+  // backends exposés sous le même domaine.
+  const wss = new WebSocketServer({ server, path: '/api/realtime' });
 
   wss.on('connection', (ws) => {
     const info: ClientInfo = { ws, structureId: null };

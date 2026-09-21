@@ -6,12 +6,36 @@ import { asyncHandler } from '../util.js';
 
 export const authRouter = Router();
 
-/** Résout le profil applicatif (rôle, structure, nom) une fois l'identité
- *  connue — passe par le pool RLS normal : un utilisateur peut toujours lire
- *  sa propre ligne `profiles` sous les policies existantes. */
+/** Résout le profil applicatif (rôle, structure, nom + coordonnées de la
+ *  structure) une fois l'identité connue — passe par le pool RLS normal.
+ *  Fusionne en une seule requête ce que le front faisait en deux appels côté
+ *  Supabase (RPC get_my_profile_light + fallback direct) : la policy
+ *  structures_select_authenticated autorise déjà tout utilisateur
+ *  authentifié à lire n'importe quelle ligne `structures`, donc le JOIN
+ *  n'a pas besoin d'un contournement SECURITY DEFINER ici. */
 async function loadProfile(userId: string) {
   return withUserContext({ id: userId }, async (client) => {
-    const { rows } = await client.query('SELECT * FROM profiles WHERE id = $1 LIMIT 1', [userId]);
+    const { rows } = await client.query(
+      `SELECT p.id, p.username, p.role, p.full_name, p.role_label, p.description,
+              p.structure_id, p.structure_type, p.staff_id, p.extra_rights,
+              s.name AS structure_name,
+              s.phone AS structure_phone, s.address AS structure_address, s.city AS structure_city,
+              s.clinic_code AS structure_clinic_code, s.fiscal_number AS structure_fiscal_number,
+              s.accreditation AS structure_accreditation,
+              COALESCE(s.settings->'billing', '{}'::jsonb) AS structure_billing,
+              CASE
+                WHEN length(COALESCE(s.booking_config->>'logoUrl', '')) BETWEEN 1 AND 499
+                  THEN s.booking_config->>'logoUrl'
+                WHEN length(COALESCE(s.settings->'general'->>'logo', '')) BETWEEN 1 AND 499
+                  THEN s.settings->'general'->>'logo'
+                ELSE NULL
+              END AS structure_logo_url
+       FROM profiles p
+       LEFT JOIN structures s ON s.id::text = p.structure_id::text
+       WHERE p.id = $1
+       LIMIT 1`,
+      [userId],
+    );
     return rows[0] ?? null;
   });
 }
