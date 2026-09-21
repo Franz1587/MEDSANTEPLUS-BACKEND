@@ -1,7 +1,9 @@
 import 'dotenv/config';
+import http from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import { pool } from './db.js';
+import { attachRealtime } from './realtime.js';
 import { authRouter } from './routes/auth.js';
 import { patientsRouter } from './routes/patients.js';
 import { invoicesRouter } from './routes/invoices.js';
@@ -82,6 +84,8 @@ app.use((err: Error & { status?: number }, _req: express.Request, res: express.R
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3003;
-app.listen(port, () => {
+const server = http.createServer(app);
+attachRealtime(server);
+server.listen(port, () => {
   console.log(`medsanteplus-backend listening on :${port}`);
 });
