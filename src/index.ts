@@ -25,6 +25,11 @@ import { insuranceStatementsRouter } from './routes/insurance-statements.js';
 import { patientInsurancesRouter } from './routes/patient-insurances.js';
 import { devisRouter } from './routes/devis.js';
 import { queueRouter } from './routes/queue.js';
+import { hospActsRouter } from './routes/hosp-acts.js';
+import { medicalDocumentsRouter } from './routes/medical-documents.js';
+import { actTypesRouter } from './routes/act-types.js';
+import { sagefemmeRouter } from './routes/sagefemme.js';
+import { teleconsultRouter } from './routes/teleconsult.js';
 
 const app = express();
 app.use(cors());
@@ -63,6 +68,11 @@ app.use('/api/insurance-statements', insuranceStatementsRouter);
 app.use('/api/patient-insurances', patientInsurancesRouter);
 app.use('/api/devis', devisRouter);
 app.use('/api/queue', queueRouter);
+app.use('/api/hospitalization-acts', hospActsRouter);
+app.use('/api/medical-documents', medicalDocumentsRouter);
+app.use('/api/act-types', actTypesRouter);
+app.use('/api/sagefemme', sagefemmeRouter);
+app.use('/api/teleconsult', teleconsultRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
 // atterrit ici plutôt que de faire planter le process.
