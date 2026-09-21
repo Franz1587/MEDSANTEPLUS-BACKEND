@@ -13,6 +13,14 @@ import { consultationsRouter } from './routes/consultations.js';
 import { appointmentsRouter } from './routes/appointments.js';
 import { emergenciesRouter } from './routes/emergencies.js';
 import { hospitalizationsRouter } from './routes/hospitalizations.js';
+import { imagingRouter } from './routes/imaging.js';
+import { labRouter } from './routes/lab.js';
+import { vitalsRouter } from './routes/vitals.js';
+import { roomsRouter } from './routes/rooms.js';
+import { insuranceRouter } from './routes/insurance.js';
+import { structuresRouter } from './routes/structures.js';
+import { profilesRouter } from './routes/profiles.js';
+import { staffRouter } from './routes/staff.js';
 
 const app = express();
 app.use(cors());
@@ -39,6 +47,14 @@ app.use('/api/consultations', consultationsRouter);
 app.use('/api/appointments', appointmentsRouter);
 app.use('/api/emergencies', emergenciesRouter);
 app.use('/api/hospitalizations', hospitalizationsRouter);
+app.use('/api/imaging-tests', imagingRouter);
+app.use('/api/lab-tests', labRouter);
+app.use('/api/vital-records', vitalsRouter);
+app.use('/api/rooms', roomsRouter);
+app.use('/api/insurance', insuranceRouter);
+app.use('/api/structures', structuresRouter);
+app.use('/api/profiles', profilesRouter);
+app.use('/api/staff', staffRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
 // atterrit ici plutôt que de faire planter le process.
