@@ -43,6 +43,10 @@ import { equipmentRouter } from './routes/equipment.js';
 import { patientPortalRouter } from './routes/patient-portal.js';
 import { bookingRequestsRouter } from './routes/booking-requests.js';
 import { controlGestionRouter } from './routes/control-gestion.js';
+import { uploadsRouter } from './routes/uploads.js';
+import { patientDocumentsRouter } from './routes/patient-documents.js';
+import { superadminImportRouter } from './routes/superadmin-import.js';
+import path from 'node:path';
 
 const app = express();
 app.use(cors());
@@ -96,6 +100,10 @@ app.use('/api/equipment', equipmentRouter);
 app.use('/api/patient-portal', patientPortalRouter);
 app.use('/api/booking-requests', bookingRequestsRouter);
 app.use('/api/control-gestion', controlGestionRouter);
+app.use('/api/uploads/files', express.static(path.resolve('/app/uploads')));
+app.use('/api/uploads', uploadsRouter);
+app.use('/api/patient-documents', patientDocumentsRouter);
+app.use('/api/superadmin-import', superadminImportRouter);
 app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
