@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { adminPool, withUserContext } from '../db.js';
 import { signToken, requireAuth } from '../auth.js';
 import { asyncHandler } from '../util.js';
+import { updateAuthUserPassword } from '../admin-auth.js';
 
 export const authRouter = Router();
 
@@ -89,6 +90,57 @@ authRouter.get(
     }
     const profile = await loadProfile(userId);
     res.json({ user: { id: user.id, email: user.email }, profile });
+  }),
+);
+
+// Miroir du flux usePasswordChange.ts (signInWithPassword + auth.updateUser côté
+// Supabase) : revérifie le mot de passe actuel avant d'écrire le nouveau,
+// sans faire porter cette vérification au client.
+authRouter.post(
+  '/change-password',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body as { oldPassword?: string; newPassword?: string };
+    if (!oldPassword || !newPassword) {
+      res.status(400).json({ error: 'oldPassword et newPassword requis' });
+      return;
+    }
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'Le nouveau mot de passe doit contenir au moins 8 caractères' });
+      return;
+    }
+    const { rows } = await adminPool.query(
+      'SELECT encrypted_password FROM auth.users WHERE id = $1 LIMIT 1',
+      [req.authUser!.id],
+    );
+    const user = rows[0];
+    if (!user || !(await bcrypt.compare(oldPassword, user.encrypted_password))) {
+      res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+      return;
+    }
+    await updateAuthUserPassword(req.authUser!.id, newPassword);
+    res.status(204).end();
+  }),
+);
+
+// Miroir de ForcePasswordChange.tsx : la session est déjà authentifiée avec le
+// mot de passe temporaire, donc pas de re-vérification d'ancien mot de passe
+// ici (contrairement à /change-password) — on fixe le nouveau et on lève le
+// drapeau force_password_change sur le profil.
+authRouter.post(
+  '/force-set-password',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { newPassword } = req.body as { newPassword?: string };
+    if (!newPassword || newPassword.length < 8) {
+      res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
+      return;
+    }
+    await updateAuthUserPassword(req.authUser!.id, newPassword);
+    await withUserContext(req.authUser!, (client) =>
+      client.query('UPDATE profiles SET force_password_change = false WHERE id = $1', [req.authUser!.id]),
+    );
+    res.status(204).end();
   }),
 );
 
