@@ -18,9 +18,14 @@ const PAYMENT_COLUMNS = [
   'invoice_id', 'structure_id', 'structure_name', 'invoice_ref', 'period', 'amount', 'rubrique', 'payment_date', 'notes',
 ] as const;
 
+// GET /api/license/invoices?structureId=... — miroir de fetchLicenseInvoices()
+// (super_admin, toutes structures) ET de Settings.tsx (scopé à sa structure)
 licenseRouter.get('/invoices', asyncHandler(async (req, res) => {
+  const { structureId } = req.query as { structureId?: string };
   const rows = await withUserContext(req.authUser!, (client) =>
-    client.query('SELECT * FROM license_invoices ORDER BY created_at DESC LIMIT 300').then((r) => r.rows),
+    structureId
+      ? client.query('SELECT * FROM license_invoices WHERE structure_id = $1 ORDER BY period DESC', [structureId]).then((r) => r.rows)
+      : client.query('SELECT * FROM license_invoices ORDER BY created_at DESC LIMIT 300').then((r) => r.rows),
   );
   res.json(rows);
 }));

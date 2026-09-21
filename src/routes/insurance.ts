@@ -105,7 +105,7 @@ insuranceRouter.delete('/companies/:id', asyncHandler(async (req, res) => {
 }));
 
 const SUBSCRIBER_COLUMNS = [
-  'insurance_id', 'name', 'registration_number', 'taux_ambulatory', 'taux_hospitalisation',
+  'id', 'insurance_id', 'name', 'registration_number', 'taux_ambulatory', 'taux_hospitalisation',
   'plafond_chambre', 'active',
 ] as const;
 
@@ -134,4 +134,42 @@ insuranceRouter.patch('/subscribers/:id', asyncHandler(async (req, res) => {
     return rows[0];
   });
   res.json(row);
+}));
+
+insuranceRouter.delete('/subscribers/:id', asyncHandler(async (req, res) => {
+  await withUserContext(req.authUser!, (client) =>
+    client.query('DELETE FROM insurance_subscribers WHERE id = $1', [req.params.id]),
+  );
+  res.status(204).end();
+}));
+
+// -- structure_insurance_links (Settings.tsx : partenaires assurance liés) --
+
+insuranceRouter.get('/structure-links/:structureId', asyncHandler(async (req, res) => {
+  const rows = await withUserContext(req.authUser!, (client) =>
+    client.query('SELECT insurance_id FROM structure_insurance_links WHERE structure_id = $1 AND active = true', [req.params.structureId])
+      .then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+insuranceRouter.post('/structure-links/link', asyncHandler(async (req, res) => {
+  const { structureId, insuranceId } = req.body as { structureId: string; insuranceId: string };
+  await withUserContext(req.authUser!, (client) =>
+    client.query(
+      `INSERT INTO structure_insurance_links (structure_id, insurance_id, active)
+       VALUES ($1, $2, true)
+       ON CONFLICT (structure_id, insurance_id) DO UPDATE SET active = true`,
+      [structureId, insuranceId],
+    ),
+  );
+  res.status(204).end();
+}));
+
+insuranceRouter.post('/structure-links/unlink', asyncHandler(async (req, res) => {
+  const { structureId, insuranceId } = req.body as { structureId: string; insuranceId: string };
+  await withUserContext(req.authUser!, (client) =>
+    client.query('DELETE FROM structure_insurance_links WHERE structure_id = $1 AND insurance_id = $2', [structureId, insuranceId]),
+  );
+  res.status(204).end();
 }));
