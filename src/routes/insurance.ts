@@ -39,6 +39,18 @@ insuranceRouter.get('/subscribers', asyncHandler(async (req, res) => {
   })));
 }));
 
+// Miroir de Hospitalizations.tsx (préchargement en lot des souscripteurs des
+// patients hospitalisés) — GET /subscribers-by-ids?ids=a,b,c
+insuranceRouter.get('/subscribers-by-ids', asyncHandler(async (req, res) => {
+  const { ids } = req.query as { ids?: string };
+  const idList = (ids ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (idList.length === 0) { res.json([]); return; }
+  const rows = await withUserContext(req.authUser!, (client) =>
+    client.query('SELECT * FROM insurance_subscribers WHERE id = ANY($1)', [idList]).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
 // Miroir de Pharmacy.tsx (taux du souscripteur sélectionné en caisse)
 insuranceRouter.get('/subscriber/:id', asyncHandler(async (req, res) => {
   const row = await withUserContext(req.authUser!, (client) =>

@@ -55,6 +55,21 @@ invoicesRouter.get(
   }),
 );
 
+// GET /api/invoices/by-hospitalization/:hospitalizationId — miroir de Hospitalizations.tsx
+invoicesRouter.get(
+  '/by-hospitalization/:hospitalizationId',
+  asyncHandler(async (req, res) => {
+    const { structureId } = req.query as { structureId?: string };
+    const row = await withUserContext(req.authUser!, (client) => {
+      const values: unknown[] = [req.params.hospitalizationId];
+      let where = 'hospitalization_id = $1';
+      if (structureId) { values.push(structureId); where += ` AND structure_id = $${values.length}`; }
+      return client.query(`SELECT id FROM invoices WHERE ${where} LIMIT 1`, values).then((r) => r.rows[0] ?? null);
+    });
+    res.json(row);
+  }),
+);
+
 // POST /api/invoices — miroir de createInvoice() (retourne juste l'id, comme l'original)
 invoicesRouter.post(
   '/',
