@@ -106,3 +106,32 @@ invoicesRouter.post(
     res.status(204).end();
   }),
 );
+
+// POST /api/invoices/release-awaiting-payment — miroir de Caisse.tsx : une
+// fois l'encaissement fait, les examens (labo/imagerie/analyses) en attente
+// de paiement pour ce patient redeviennent visibles dans les files
+// laboratoire/imagerie/analyses (awaiting_payment → pending), en une seule
+// transaction plutôt que 3 requêtes séparées.
+invoicesRouter.post(
+  '/release-awaiting-payment',
+  asyncHandler(async (req, res) => {
+    const { structureId, patientId } = req.body as { structureId: string; patientId: string };
+    await withUserContext(req.authUser!, (client) =>
+      Promise.all([
+        client.query(
+          "UPDATE lab_tests SET status = 'pending', updated_at = now() WHERE structure_id = $1 AND patient_id = $2 AND status = 'awaiting_payment'",
+          [structureId, patientId],
+        ),
+        client.query(
+          "UPDATE imaging_tests SET status = 'pending', updated_at = now() WHERE structure_id = $1 AND patient_id = $2 AND status = 'awaiting_payment'",
+          [structureId, patientId],
+        ),
+        client.query(
+          "UPDATE analyse_orders SET status = 'pending', updated_at = now() WHERE structure_id = $1 AND patient_id = $2 AND status = 'awaiting_payment'",
+          [structureId, patientId],
+        ),
+      ]),
+    );
+    res.status(204).end();
+  }),
+);
