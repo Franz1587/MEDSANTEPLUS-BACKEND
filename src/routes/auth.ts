@@ -26,7 +26,7 @@ authRouter.post(
     }
 
     const { rows } = await adminPool.query(
-      'SELECT id, encrypted_password FROM auth.users WHERE lower(email) = lower($1) LIMIT 1',
+      'SELECT id, encrypted_password, banned_until FROM auth.users WHERE lower(email) = lower($1) LIMIT 1',
       [email],
     );
     const user = rows[0];
@@ -38,6 +38,11 @@ authRouter.post(
     const valid = await bcrypt.compare(password, user.encrypted_password);
     if (!valid) {
       res.status(401).json({ error: 'Identifiants invalides' });
+      return;
+    }
+
+    if (user.banned_until && new Date(user.banned_until).getTime() > Date.now()) {
+      res.status(403).json({ error: 'Compte suspendu' });
       return;
     }
 

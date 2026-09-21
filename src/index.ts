@@ -32,6 +32,8 @@ import { medicalDocumentsRouter } from './routes/medical-documents.js';
 import { actTypesRouter } from './routes/act-types.js';
 import { sagefemmeRouter } from './routes/sagefemme.js';
 import { teleconsultRouter } from './routes/teleconsult.js';
+import { edgeFunctionsRouter } from './routes/edge-functions.js';
+import { partnerApiRouter } from './routes/partner-api.js';
 
 const app = express();
 app.use(cors());
@@ -75,6 +77,8 @@ app.use('/api/medical-documents', medicalDocumentsRouter);
 app.use('/api/act-types', actTypesRouter);
 app.use('/api/sagefemme', sagefemmeRouter);
 app.use('/api/teleconsult', teleconsultRouter);
+app.use('/api', edgeFunctionsRouter);
+app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
 // atterrit ici plutôt que de faire planter le process.
