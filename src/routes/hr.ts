@@ -13,10 +13,10 @@ hrRouter.use(requireAuth);
 // -- Gardes -------------------------------------------------------------
 
 hrRouter.get('/guard-shifts', asyncHandler(async (req, res) => {
-  const { structureId } = req.query as { structureId?: string };
+  const { structureId, limit } = req.query as { structureId?: string; limit?: string };
   if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
   const rows = await withUserContext(req.authUser!, (client) =>
-    client.query('SELECT * FROM guard_shifts WHERE structure_id = $1 ORDER BY started_at DESC LIMIT 100', [structureId])
+    client.query('SELECT * FROM guard_shifts WHERE structure_id = $1 ORDER BY started_at DESC LIMIT $2', [structureId, Number(limit) || 100])
       .then((r) => r.rows),
   );
   res.json(rows);
@@ -257,4 +257,39 @@ hrRouter.post('/planning/bulk-upsert', asyncHandler(async (req, res) => {
     return created;
   });
   res.status(201).json(rows);
+}));
+
+// -- Fiches d'honoraires médecin (doctor_honoraire_slips) — Accounting.tsx ----
+
+hrRouter.get('/honoraire-slips', asyncHandler(async (req, res) => {
+  const { structureId } = req.query as { structureId?: string };
+  if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
+  const rows = await withUserContext(req.authUser!, (client) =>
+    client.query('SELECT id FROM doctor_honoraire_slips WHERE structure_id = $1', [structureId])
+      .then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+const HONORAIRE_SLIP_COLUMNS = [
+  'id', 'structure_id', 'staff_id', 'doctor_name', 'period', 'slip_ref',
+  'honoraires_bruts', 'gardes_amount', 'total_amount', 'items', 'garde_items', 'status',
+] as const;
+
+hrRouter.post('/honoraire-slips/upsert', asyncHandler(async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+  const present = HONORAIRE_SLIP_COLUMNS.filter((c) => body[c] !== undefined);
+  const values = present.map((c) => (c === 'items' || c === 'garde_items') && typeof body[c] !== 'string' ? JSON.stringify(body[c]) : body[c]);
+  const placeholders = present.map((_, i) => `$${i + 1}`);
+  const updates = present.filter((c) => c !== 'id').map((c) => `${c} = EXCLUDED.${c}`);
+  const row = await withUserContext(req.authUser!, async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO doctor_honoraire_slips (${present.join(',')}) VALUES (${placeholders.join(',')})
+       ON CONFLICT (id) DO UPDATE SET ${updates.join(',')}
+       RETURNING *`,
+      values,
+    );
+    return rows[0];
+  });
+  res.status(201).json(row);
 }));

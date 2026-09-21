@@ -41,6 +41,8 @@ import { hrRouter } from './routes/hr.js';
 import { publicRouter } from './routes/public.js';
 import { equipmentRouter } from './routes/equipment.js';
 import { patientPortalRouter } from './routes/patient-portal.js';
+import { bookingRequestsRouter } from './routes/booking-requests.js';
+import { controlGestionRouter } from './routes/control-gestion.js';
 
 const app = express();
 app.use(cors());
@@ -92,6 +94,8 @@ app.use('/api/hr', hrRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/equipment', equipmentRouter);
 app.use('/api/patient-portal', patientPortalRouter);
+app.use('/api/booking-requests', bookingRequestsRouter);
+app.use('/api/control-gestion', controlGestionRouter);
 app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()

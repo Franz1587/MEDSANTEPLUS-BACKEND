@@ -43,22 +43,30 @@ invoicesRouter.get(
   }),
 );
 
-// GET /api/invoices/by-status?structureId=&statuses=pending,draft&limit=300 — miroir des
-// filtres .in('status', [...]) utilisés par Billing.tsx (file d'attente, clôturées, relevés).
+// GET /api/invoices/by-status?structureId=&statuses=pending,draft&limit=300&from=&to= — miroir des
+// filtres .in('status', [...]) utilisés par Billing.tsx et Caisse.tsx (file d'attente, clôturées,
+// relevés, encaissements du jour, historique) — from/to filtrent sur created_at (optionnels).
 invoicesRouter.get(
   '/by-status',
   asyncHandler(async (req, res) => {
-    const { structureId, statuses, limit } = req.query as { structureId?: string; statuses?: string; limit?: string };
+    const { structureId, statuses, limit, from, to } = req.query as {
+      structureId?: string; statuses?: string; limit?: string; from?: string; to?: string;
+    };
     if (!structureId || !statuses) { res.status(400).json({ error: 'structureId et statuses requis' }); return; }
     const statusList = statuses.split(',').filter(Boolean);
-    const rows = await withUserContext(req.authUser!, (client) =>
-      client.query(
+    const rows = await withUserContext(req.authUser!, (client) => {
+      const values: unknown[] = [structureId, statusList];
+      let where = 'structure_id = $1 AND status = ANY($2)';
+      if (from) { values.push(from); where += ` AND created_at >= $${values.length}`; }
+      if (to)   { values.push(to);   where += ` AND created_at <= $${values.length}`; }
+      values.push(Number(limit) || 300);
+      return client.query(
         `SELECT id,patient_id,date,items,subtotal,tax,total,status,insurance_id,insurance_part,
                 patient_part,tiers_payant,payment_method,created_at
-         FROM invoices WHERE structure_id = $1 AND status = ANY($2) ORDER BY created_at DESC LIMIT $3`,
-        [structureId, statusList, Number(limit) || 300],
-      ).then((r) => r.rows),
-    );
+         FROM invoices WHERE ${where} ORDER BY created_at DESC LIMIT $${values.length}`,
+        values,
+      ).then((r) => r.rows);
+    });
     res.json(rows);
   }),
 );

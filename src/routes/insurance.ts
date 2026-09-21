@@ -126,6 +126,31 @@ insuranceRouter.post('/subscribers', asyncHandler(async (req, res) => {
   res.status(201).json(row);
 }));
 
+// POST /insurance/subscribers/bulk — import CSV par lots (Settings.tsx). Chaque lot est
+// une seule requête multi-VALUES : soit tout le lot est inséré, soit il échoue en bloc
+// (même sémantique que l'ancien .insert(batch) Supabase, l'appelant gère déjà le retry/erreur par lot).
+insuranceRouter.post('/subscribers/bulk', asyncHandler(async (req, res) => {
+  const batch = req.body as Record<string, unknown>[];
+  if (!Array.isArray(batch) || batch.length === 0) { res.json([]); return; }
+  const cols = SUBSCRIBER_COLUMNS;
+  const values: unknown[] = [];
+  const rowsSql = batch.map((row, i) => {
+    const placeholders = cols.map((c, j) => {
+      values.push(row[c] ?? null);
+      return `$${i * cols.length + j + 1}`;
+    });
+    return `(${placeholders.join(',')})`;
+  });
+  const rows = await withUserContext(req.authUser!, (client) =>
+    client.query(
+      `INSERT INTO insurance_subscribers (${cols.join(',')}) VALUES ${rowsSql.join(',')}
+       RETURNING id, name, taux_ambulatory, taux_hospitalisation, plafond_chambre`,
+      values,
+    ).then((r) => r.rows),
+  );
+  res.status(201).json(rows);
+}));
+
 insuranceRouter.patch('/subscribers/:id', asyncHandler(async (req, res) => {
   const row = await withUserContext(req.authUser!, async (client) => {
     const update = buildUpdate('insurance_subscribers', SUBSCRIBER_COLUMNS, req.body, 'id', req.params.id);
