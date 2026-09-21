@@ -43,6 +43,26 @@ invoicesRouter.get(
   }),
 );
 
+// GET /api/invoices/by-status?structureId=&statuses=pending,draft&limit=300 — miroir des
+// filtres .in('status', [...]) utilisés par Billing.tsx (file d'attente, clôturées, relevés).
+invoicesRouter.get(
+  '/by-status',
+  asyncHandler(async (req, res) => {
+    const { structureId, statuses, limit } = req.query as { structureId?: string; statuses?: string; limit?: string };
+    if (!structureId || !statuses) { res.status(400).json({ error: 'structureId et statuses requis' }); return; }
+    const statusList = statuses.split(',').filter(Boolean);
+    const rows = await withUserContext(req.authUser!, (client) =>
+      client.query(
+        `SELECT id,patient_id,date,items,subtotal,tax,total,status,insurance_id,insurance_part,
+                patient_part,tiers_payant,payment_method,created_at
+         FROM invoices WHERE structure_id = $1 AND status = ANY($2) ORDER BY created_at DESC LIMIT $3`,
+        [structureId, statusList, Number(limit) || 300],
+      ).then((r) => r.rows),
+    );
+    res.json(rows);
+  }),
+);
+
 // GET /api/invoices/by-patient/:patientId — miroir de fetchInvoicesByPatient()
 invoicesRouter.get(
   '/by-patient/:patientId',
@@ -66,6 +86,17 @@ invoicesRouter.get(
       if (structureId) { values.push(structureId); where += ` AND structure_id = $${values.length}`; }
       return client.query(`SELECT id FROM invoices WHERE ${where} LIMIT 1`, values).then((r) => r.rows[0] ?? null);
     });
+    res.json(row);
+  }),
+);
+
+// GET /api/invoices/:id — miroir de handleOpenEditInvoice (Billing.tsx)
+invoicesRouter.get(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const row = await withUserContext(req.authUser!, (client) =>
+      client.query('SELECT * FROM invoices WHERE id = $1', [req.params.id]).then((r) => r.rows[0] ?? null),
+    );
     res.json(row);
   }),
 );

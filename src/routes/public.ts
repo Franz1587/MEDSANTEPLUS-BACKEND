@@ -43,6 +43,151 @@ publicRouter.post('/booking-requests', asyncHandler(async (req, res) => {
   res.status(201).json(row);
 }));
 
+// POST /public/portal-clinic-data — miroir de PatientPortal.tsx (RPC légère sans booking_config)
+publicRouter.post('/portal-clinic-data', asyncHandler(async (req, res) => {
+  const { slug } = req.body as { slug: string };
+  const result = await withUserContext(null, async (client) => {
+    const { rows } = await client.query('SELECT get_portal_clinic_data($1) AS result', [slug]);
+    return rows[0].result;
+  });
+  res.json(result);
+}));
+
+// GET /public/my-bookings?structureId=&email= — miroir de PatientPortal.tsx (mes rendez-vous)
+publicRouter.get('/my-bookings', asyncHandler(async (req, res) => {
+  const { structureId, email } = req.query as { structureId?: string; email?: string };
+  if (!structureId || !email) { res.status(400).json({ error: 'structureId et email requis' }); return; }
+  const rows = await withUserContext(null, (client) =>
+    client.query(
+      'SELECT * FROM booking_requests WHERE structure_id = $1 AND email = $2 ORDER BY created_at DESC',
+      [structureId, email.toLowerCase()],
+    ).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+// POST /public/portal-login — miroir de PatientPortal.tsx (auth propre au portail patient,
+// distincte du JWT staff : compare le hash déjà calculé côté client, ne retourne jamais
+// password_hash au front).
+publicRouter.post('/portal-login', asyncHandler(async (req, res) => {
+  const { email, structureId, passwordHash } = req.body as { email: string; structureId: string; passwordHash: string };
+  const row = await withUserContext(null, (client) =>
+    client.query(
+      `SELECT id, structure_id, first_name, last_name, email, phone, status, patient_id,
+              has_insurance, insurance_id, insurance_policy_number, subscriber_company_id,
+              is_cnamgs, cnamgs_type, nag_cnamgs, cnamgs_employer, reject_reason, created_at
+       FROM patient_portal_accounts WHERE email = $1 AND structure_id = $2 AND password_hash = $3`,
+      [email.trim().toLowerCase(), structureId, passwordHash],
+    ).then((r) => r.rows[0] ?? null),
+  );
+  res.json(row);
+}));
+
+// GET /public/portal-account-exists?structureId=&email= — vérifie l'unicité email à l'inscription
+publicRouter.get('/portal-account-exists', asyncHandler(async (req, res) => {
+  const { structureId, email } = req.query as { structureId?: string; email?: string };
+  if (!structureId || !email) { res.status(400).json({ error: 'structureId et email requis' }); return; }
+  const row = await withUserContext(null, (client) =>
+    client.query(
+      'SELECT id FROM patient_portal_accounts WHERE email = $1 AND structure_id = $2',
+      [email.trim().toLowerCase(), structureId],
+    ).then((r) => r.rows[0] ?? null),
+  );
+  res.json(row);
+}));
+
+// GET /public/portal-insurers?structureId=... — assureurs liés à la clinique (inscription portail)
+publicRouter.get('/portal-insurers', asyncHandler(async (req, res) => {
+  const { structureId } = req.query as { structureId?: string };
+  if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
+  const rows = await withUserContext(null, (client) =>
+    client.query(
+      `SELECT ic.id, ic.name, ic.type, ic.logo_url, ic.color
+       FROM structure_insurance_links sil
+       JOIN insurance_companies ic ON ic.id = sil.insurance_id
+       WHERE sil.structure_id = $1 AND sil.active = true`,
+      [structureId],
+    ).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+// GET /public/portal-subscribers — tous les souscripteurs actifs (inscription portail patient)
+publicRouter.get('/portal-subscribers', asyncHandler(async (_req, res) => {
+  const rows = await withUserContext(null, (client) =>
+    client.query(
+      "SELECT id, name, insurance_id FROM insurance_subscribers WHERE active = true ORDER BY name",
+    ).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+// GET /public/default-structure — première structure avec booking activé (PublicBooking.tsx)
+publicRouter.get('/default-structure', asyncHandler(async (_req, res) => {
+  const row = await withUserContext(null, (client) =>
+    client.query("SELECT id FROM structures WHERE booking_enabled = true LIMIT 1").then((r) => r.rows[0] ?? null),
+  );
+  res.json(row);
+}));
+
+// POST /public/booking-clinic-data — miroir de ClinicBooking.tsx (RPC léger sans images base64)
+publicRouter.post('/booking-clinic-data', asyncHandler(async (req, res) => {
+  const { slug } = req.body as { slug: string };
+  const result = await withUserContext(null, async (client) => {
+    const { rows } = await client.query('SELECT get_booking_clinic_data($1) AS result', [slug]);
+    return rows[0].result;
+  });
+  res.json(result);
+}));
+
+// POST /public/booking-clinic-images — lazy-load images base64 (ClinicBooking.tsx)
+publicRouter.post('/booking-clinic-images', asyncHandler(async (req, res) => {
+  const { slug } = req.body as { slug: string };
+  const result = await withUserContext(null, async (client) => {
+    const { rows } = await client.query('SELECT get_booking_clinic_images($1) AS result', [slug]);
+    return rows[0].result;
+  });
+  res.json(result);
+}));
+
+// GET /public/doctors?structureId=... — liste des médecins d'une clinique (ClinicBooking.tsx)
+publicRouter.get('/doctors', asyncHandler(async (req, res) => {
+  const { structureId } = req.query as { structureId?: string };
+  if (!structureId) { res.status(400).json({ error: 'structureId requis' }); return; }
+  const rows = await withUserContext(null, (client) =>
+    client.query(
+      `SELECT id, first_name, last_name, specialization FROM staff
+       WHERE structure_id = $1 AND role IN ('doctor', 'dentist', 'radiologist') AND status = 'active'
+       ORDER BY last_name`,
+      [structureId],
+    ).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+// GET /public/insurance-subscribers?insuranceId=... — souscripteurs d'un assureur (ClinicBooking.tsx)
+publicRouter.get('/insurance-subscribers', asyncHandler(async (req, res) => {
+  const { insuranceId } = req.query as { insuranceId?: string };
+  if (!insuranceId) { res.status(400).json({ error: 'insuranceId requis' }); return; }
+  const rows = await withUserContext(null, (client) =>
+    client.query(
+      'SELECT id, name, registration_number FROM insurance_subscribers WHERE insurance_id = $1 ORDER BY name',
+      [insuranceId],
+    ).then((r) => r.rows),
+  );
+  res.json(rows);
+}));
+
+// POST /public/portal-patient-data — miroir de PatientPortal.tsx (compte portail + dossier lié)
+publicRouter.post('/portal-patient-data', asyncHandler(async (req, res) => {
+  const { portalAccountId, structureId } = req.body as { portalAccountId: string; structureId: string };
+  const result = await withUserContext(null, async (client) => {
+    const { rows } = await client.query('SELECT get_portal_patient_data($1, $2) AS result', [portalAccountId, structureId]);
+    return rows[0].result;
+  });
+  res.json(result);
+}));
+
 publicRouter.post('/check-pharmacy-stock', asyncHandler(async (req, res) => {
   const { slug, query } = req.body as { slug: string; query: string };
   const result = await withUserContext(null, async (client) => {
