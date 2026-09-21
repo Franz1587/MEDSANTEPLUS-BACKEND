@@ -31,6 +31,18 @@ profilesRouter.get('/', asyncHandler(async (req, res) => {
   res.json(rows);
 }));
 
+// Lier un compte staff au profil d'un administrateur déjà existant (voir
+// Administration.tsx handleCreateUser — cas "médecin également admin").
+profilesRouter.patch('/by-username/:username', asyncHandler(async (req, res) => {
+  const row = await withUserContext(req.authUser!, async (client) => {
+    const update = buildUpdate('profiles', PROFILE_COLUMNS, req.body, 'username', req.params.username);
+    if (!update) throw Object.assign(new Error('Aucun champ à mettre à jour'), { status: 400 });
+    const { rows } = await client.query(update.text, update.values);
+    return rows[0];
+  });
+  res.json(row);
+}));
+
 // Miroir de updateProfile()
 profilesRouter.patch('/:id', asyncHandler(async (req, res) => {
   const row = await withUserContext(req.authUser!, async (client) => {
