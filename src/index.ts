@@ -47,9 +47,11 @@ import { uploadsRouter } from './routes/uploads.js';
 import { patientDocumentsRouter } from './routes/patient-documents.js';
 import { superadminImportRouter } from './routes/superadmin-import.js';
 import path from 'node:path';
+import { register, metricsMiddleware, startUploadsDirWatcher } from './metrics.js';
 
 const app = express();
 app.use(cors());
+app.use(metricsMiddleware);
 app.use(express.json());
 
 app.get('/health', async (_req, res) => {
@@ -61,6 +63,19 @@ app.get('/health', async (_req, res) => {
     res.status(500).json({ status: 'error', message: (err as Error).message });
   }
 });
+
+// Hors /api — jamais exposé par Caddy publiquement, scrapé uniquement en
+// local (127.0.0.1:3003/metrics) par Prometheus sur le même VPS. Le jeton
+// est une défense en profondeur au cas où le port serait un jour ouvert.
+app.get('/metrics', async (req, res) => {
+  if (process.env.METRICS_TOKEN && req.query.token !== process.env.METRICS_TOKEN) {
+    res.status(403).end();
+    return;
+  }
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
+startUploadsDirWatcher(path.resolve('/app/uploads'));
 
 app.use('/api/auth', authRouter);
 app.use('/api/patients', patientsRouter);
