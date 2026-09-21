@@ -31,7 +31,9 @@ export async function withUserContext<T>(
     await client.query('BEGIN');
     if (user) {
       await client.query('SET LOCAL ROLE authenticated');
-      await client.query('SET LOCAL request.jwt.claims = $1', [
+      // set_config(..., true) = portée transaction, équivalent à SET LOCAL mais
+      // paramétrable — "SET LOCAL x = $1" n'est pas une syntaxe SQL valide.
+      await client.query("SELECT set_config('request.jwt.claims', $1, true)", [
         JSON.stringify({ sub: user.id, role: 'authenticated' }),
       ]);
     } else {
