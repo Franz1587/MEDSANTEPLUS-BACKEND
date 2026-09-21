@@ -34,6 +34,7 @@ import { sagefemmeRouter } from './routes/sagefemme.js';
 import { teleconsultRouter } from './routes/teleconsult.js';
 import { edgeFunctionsRouter } from './routes/edge-functions.js';
 import { partnerApiRouter } from './routes/partner-api.js';
+import { notificationsRouter } from './routes/notifications.js';
 
 const app = express();
 app.use(cors());
@@ -78,13 +79,17 @@ app.use('/api/act-types', actTypesRouter);
 app.use('/api/sagefemme', sagefemmeRouter);
 app.use('/api/teleconsult', teleconsultRouter);
 app.use('/api', edgeFunctionsRouter);
+app.use('/api/notifications', notificationsRouter);
 app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()
 // atterrit ici plutôt que de faire planter le process.
-app.use((err: Error & { status?: number }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error & { status?: number; code?: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[error]', err);
-  res.status(err.status ?? 500).json({ error: err.message ?? 'Erreur interne' });
+  // err.code = code SQLSTATE Postgres (ex: 23505 = violation unicité) quand
+  // l'erreur vient de `pg` — transmis tel quel pour que le front puisse
+  // continuer à faire des `if (err.code === '23505')` comme avec PostgREST.
+  res.status(err.status ?? 500).json({ error: err.message ?? 'Erreur interne', code: err.code });
 });
 
 const port = process.env.PORT ? Number(process.env.PORT) : 3003;
