@@ -1,4 +1,25 @@
-import { Pool, type PoolClient } from 'pg';
+import pg, { Pool, type PoolClient } from 'pg';
+
+// `pg` renvoie NUMERIC/DECIMAL (OID 1700) et BIGINT (OID 20) sous forme de
+// chaînes par défaut (pour ne pas perdre de précision sur de très grands
+// entiers) — mais PostgREST, lui, les renvoyait en JSON comme de vrais
+// nombres. Sans ce correctif, tout calcul arithmétique côté front sur un
+// champ numeric (subtotal, tax, total, insurance_part, taux_*, prix...)
+// fait de la concaténation de chaînes au lieu d'une addition (ex: montant
+// total affiché "NaN FCFA"). Nos montants FCFA et compteurs restent bien en
+// deçà de Number.MAX_SAFE_INTEGER, donc aucun risque de perte de précision.
+pg.types.setTypeParser(1700, (val: string) => (val === null ? null : parseFloat(val)));
+pg.types.setTypeParser(20, (val: string) => (val === null ? null : parseInt(val, 10)));
+
+// `pg` parse aussi les colonnes DATE (OID 1082, sans heure — date_of_birth,
+// invoices.date, hospitalizations.admission_date, etc.) en objet Date JS à
+// minuit LOCAL, puis JSON.stringify() le sérialise en horodatage ISO complet
+// ("2001-02-15T00:00:00.000Z") au lieu de la simple date ("2001-02-15") que
+// renvoyait PostgREST. Le front concatène souvent `dateOfBirth + 'T00:00'`
+// en supposant une date nue : sur l'horodatage complet ça donne
+// "...000ZT00:00", un Date invalide (affiché "date de naissance invalide").
+// On garde donc la chaîne brute Postgres telle quelle, sans conversion.
+pg.types.setTypeParser(1082, (val: string) => val);
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
