@@ -35,6 +35,8 @@ import { teleconsultRouter } from './routes/teleconsult.js';
 import { edgeFunctionsRouter } from './routes/edge-functions.js';
 import { partnerApiRouter } from './routes/partner-api.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { adminRouter } from './routes/admin.js';
+import { licenseRouter } from './routes/license.js';
 
 const app = express();
 app.use(cors());
@@ -80,6 +82,8 @@ app.use('/api/sagefemme', sagefemmeRouter);
 app.use('/api/teleconsult', teleconsultRouter);
 app.use('/api', edgeFunctionsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/license', licenseRouter);
 app.use('/partner-api', partnerApiRouter);
 
 // Middleware d'erreurs global — toute route enveloppée par asyncHandler()

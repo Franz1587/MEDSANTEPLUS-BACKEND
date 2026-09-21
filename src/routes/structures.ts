@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { withUserContext } from '../db.js';
 import { requireAuth } from '../auth.js';
-import { asyncHandler, buildUpdate } from '../util.js';
+import { asyncHandler, buildInsert, buildUpdate } from '../util.js';
 
 export const structuresRouter = Router();
 structuresRouter.use(requireAuth);
@@ -45,4 +45,47 @@ structuresRouter.patch('/:id', asyncHandler(async (req, res) => {
     return rows[0];
   });
   res.json(row);
+}));
+
+// POST /api/structures — miroir de handleCreateStructure() (SuperAdmin.tsx) :
+// id généré par structures_seq (jamais transmis), retry côté serveur sur
+// collision 23505/structures_pkey (séquence désynchronisée) plutôt que de
+// remonter l'erreur Postgres brute au client.
+structuresRouter.post('/', asyncHandler(async (req, res) => {
+  const row = await withUserContext(req.authUser!, async (client) => {
+    const body = normalizeStructureJson(req.body);
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const insert = buildInsert('structures', STRUCTURE_COLUMNS, body);
+        const { rows } = await client.query(insert.text, insert.values);
+        return rows[0];
+      } catch (err) {
+        const pgErr = err as { code?: string; message?: string };
+        if (pgErr.code !== '23505' || !pgErr.message?.includes('structures_pkey')) throw err;
+      }
+    }
+    throw new Error('Impossible de créer la structure (collision id, 5 tentatives échouées)');
+  });
+  res.status(201).json(row);
+}));
+
+// POST /api/structures/:id/seed-pharmacy-catalog — miroir du chargement du
+// catalogue pharmacie par défaut dans handleCreateStructure() : copie
+// entièrement côté serveur (une seule requête INSERT...SELECT) plutôt que
+// 3800+ lignes rapatriées puis renvoyées une à une depuis le client.
+structuresRouter.post('/:id/seed-pharmacy-catalog', asyncHandler(async (req, res) => {
+  const count = await withUserContext(req.authUser!, async (client) => {
+    const { rows } = await client.query(
+      `INSERT INTO stock_items
+         (structure_id, name, generic_name, category, family, form, dosage, unit,
+          current_stock, min_stock, unit_price, selling_price, purchase_price, cip_code)
+       SELECT $1, name, generic_name, category, family, form, dosage, unit,
+              30, min_stock, unit_price, unit_price, 0, cip_code
+       FROM pharmacy_default_catalog
+       RETURNING id`,
+      [req.params.id],
+    );
+    return rows.length;
+  });
+  res.status(201).json({ count });
 }));
