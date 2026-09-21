@@ -5,6 +5,17 @@ export const pool = new Pool({
   max: 10,
 });
 
+/** Pool élevé (rôle postgres) — réservé aux besoins qui ne peuvent pas
+ *  passer par le rôle authenticator, en premier lieu la vérification du mot
+ *  de passe au login : auth.users n'est lisible que par postgres, jamais par
+ *  authenticated/anon (verrouillé ainsi par Supabase lui-même). Ne jamais
+ *  utiliser ce pool pour une requête dont le contenu dépend de l'utilisateur
+ *  authentifié — cela court-circuiterait les policies RLS. */
+export const adminPool = new Pool({
+  connectionString: process.env.ADMIN_DATABASE_URL,
+  max: 5,
+});
+
 /**
  * Exécute une requête dans une transaction où l'identité de l'utilisateur
  * authentifié est posée via SET LOCAL — Postgres applique alors les mêmes
@@ -12,7 +23,7 @@ export const pool = new Pool({
  * politique n'ait besoin d'être dupliquée ou réécrite côté backend.
  */
 export async function withUserContext<T>(
-  user: { id: string; role: string } | null,
+  user: { id: string } | null,
   fn: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const client = await pool.connect();
