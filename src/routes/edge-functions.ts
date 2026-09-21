@@ -287,10 +287,11 @@ edgeFunctionsRouter.post(
 );
 
 // ─── notify-patient ─────────────────────────────────────────────────────────
-// Contrairement à l'Edge Function d'origine (ouverte, protégée uniquement par
-// la clé apikey Kong côté Supabase), cette route exige une session valide —
-// il n'y a plus de gateway séparée devant ce backend pour jouer ce rôle, donc
-// on exige requireAuth pour ne pas exposer un relais SMS non authentifié.
+// Reste public (sans requireAuth), comme l'Edge Function d'origine : appelée
+// à la fois par du personnel authentifié (approbation/rejet d'une demande
+// portail) ET par PatientPortal.tsx pendant l'auto-inscription, où le patient
+// n'a par définition pas encore de session — un vrai appelant anonyme
+// légitime, pas seulement un vestige de l'ancienne gateway Supabase.
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -370,7 +371,6 @@ async function sendTwilioWhatsApp(to: string, message: string): Promise<{ sent: 
 
 edgeFunctionsRouter.post(
   '/notify-patient',
-  requireAuth,
   asyncHandler(async (req, res) => {
     const { type, phone, firstName, clinicName, portalUrl, reason, sendSms, sendWhatsapp } = req.body as Record<string, unknown>;
 

@@ -39,6 +39,14 @@ insuranceRouter.get('/subscribers', asyncHandler(async (req, res) => {
   })));
 }));
 
+// Miroir de Pharmacy.tsx (taux du souscripteur sélectionné en caisse)
+insuranceRouter.get('/subscriber/:id', asyncHandler(async (req, res) => {
+  const row = await withUserContext(req.authUser!, (client) =>
+    client.query('SELECT * FROM insurance_subscribers WHERE id = $1 LIMIT 1', [req.params.id]).then((r) => r.rows[0] ?? null),
+  );
+  res.json(row);
+}));
+
 // -- CRUD complet (SuperAdmin.tsx) -------------------------------------------
 
 const COMPANY_COLUMNS = [
