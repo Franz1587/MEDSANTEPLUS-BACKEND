@@ -18,6 +18,10 @@ function mountSfCrud(opts: {
    *  cette colonne (ex: patients) — évite une référence ambiguë en SQL. */
   whereStructureCol?: string;
   relatedColumn?: string; relatedSelect?: string; relatedFrom?: string;
+  /** orderBy pour la requête by-<relatedColumn> quand elle diffère de la liste
+   *  (ex: `orderBy` qualifie un alias de JOIN — 'g.created_at DESC' — qui n'existe
+   *  plus dès que `relatedFrom` n'est pas fourni et retombe sur la table nue). */
+  relatedOrderBy?: string;
 }) {
   const base = `/${opts.path}`;
   sagefemmeRouter.get(`${base}`, asyncHandler(async (req, res) => {
@@ -36,7 +40,7 @@ function mountSfCrud(opts: {
     sagefemmeRouter.get(`${base}/by-${opts.relatedColumn}/:value`, asyncHandler(async (req, res) => {
       const rows = await withUserContext(req.authUser!, (client) =>
         client.query(
-          `SELECT ${opts.relatedSelect ?? '*'} FROM ${opts.relatedFrom ?? opts.table} WHERE ${opts.relatedColumn} = $1 ORDER BY ${opts.orderBy}`,
+          `SELECT ${opts.relatedSelect ?? '*'} FROM ${opts.relatedFrom ?? opts.table} WHERE ${opts.relatedColumn} = $1 ORDER BY ${opts.relatedOrderBy ?? opts.orderBy}`,
           [req.params.value],
         ).then((r) => r.rows),
       );
@@ -73,6 +77,7 @@ mountSfCrud({
   whereStructureCol: 'g.structure_id',
   orderBy: 'g.created_at DESC',
   relatedColumn: 'patient_id',
+  relatedOrderBy: 'created_at DESC',
 });
 
 // -- SUIVI GROSSESSE -----------------------------------------------------------
