@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { PoolClient } from 'pg';
 import { withUserContext } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { asyncHandler, buildInsert, buildUpdate } from '../util.js';
@@ -13,6 +14,43 @@ const PATIENT_COLUMNS = [
   'phone', 'email', 'address', 'blood_type', 'allergies', 'chronic_diseases',
   'emergency_contact', 'insurance', 'portal_account_id', 'created_at', 'updated_at',
 ] as const;
+
+const PATIENT_SELECT_COLS = `id,first_name,last_name,date_of_birth,gender,phone,email,address,blood_type,
+                allergies,chronic_diseases,emergency_contact,insurance,created_at`;
+
+/** Même règle de rapprochement que côté front (findDuplicatePatient) : même nom
+ *  (insensible à la casse) + même date de naissance, ou à défaut même nom +
+ *  même téléphone. Exécutée aussi côté serveur pour l'appel d'insertion
+ *  lui-même (voir POST /) — le pré-contrôle front seul ne protège pas contre
+ *  une double soumission concurrente ni contre un futur appelant qui
+ *  oublierait de faire l'appel /find-duplicate avant de créer. */
+async function findDuplicatePatientRow(
+  client: PoolClient,
+  structureId: string,
+  firstName: string,
+  lastName: string,
+  dateOfBirth: string,
+  phone: string,
+): Promise<Record<string, unknown> | null> {
+  const normalizedPhone = (phone ?? '').trim().replace(/\s+/g, '');
+  const fn = (firstName ?? '').trim();
+  const ln = (lastName ?? '').trim();
+  if (!fn || !ln) return null;
+
+  const byDob = await client.query(
+    `SELECT ${PATIENT_SELECT_COLS} FROM patients WHERE structure_id = $1 AND first_name ILIKE $2 AND last_name ILIKE $3
+     AND date_of_birth = $4 LIMIT 1`,
+    [structureId, fn, ln, dateOfBirth],
+  );
+  if (byDob.rows[0]) return byDob.rows[0];
+  if (!normalizedPhone) return null;
+  const byPhone = await client.query(
+    `SELECT ${PATIENT_SELECT_COLS} FROM patients WHERE structure_id = $1 AND first_name ILIKE $2 AND last_name ILIKE $3
+     AND phone = $4 LIMIT 1`,
+    [structureId, fn, ln, normalizedPhone],
+  );
+  return byPhone.rows[0] ?? null;
+}
 
 // GET /api/patients?structureId=... — miroir de fetchPatients()
 patientsRouter.get(
@@ -56,28 +94,9 @@ patientsRouter.post(
   '/find-duplicate',
   asyncHandler(async (req, res) => {
     const { structureId, firstName, lastName, dateOfBirth, phone } = req.body as Record<string, string>;
-    const normalizedPhone = (phone ?? '').trim().replace(/\s+/g, '');
-    const fn = (firstName ?? '').trim();
-    const ln = (lastName ?? '').trim();
-    const patient = await withUserContext(req.authUser!, async (client) => {
-      const byDob = await client.query(
-        `SELECT id,first_name,last_name,date_of_birth,gender,phone,email,address,blood_type,
-                allergies,chronic_diseases,emergency_contact,insurance,created_at
-         FROM patients WHERE structure_id = $1 AND first_name ILIKE $2 AND last_name ILIKE $3
-         AND date_of_birth = $4 LIMIT 1`,
-        [structureId, fn, ln, dateOfBirth],
-      );
-      if (byDob.rows[0]) return byDob.rows[0];
-      if (!normalizedPhone || !fn || !ln) return null;
-      const byPhone = await client.query(
-        `SELECT id,first_name,last_name,date_of_birth,gender,phone,email,address,blood_type,
-                allergies,chronic_diseases,emergency_contact,insurance,created_at
-         FROM patients WHERE structure_id = $1 AND first_name ILIKE $2 AND last_name ILIKE $3
-         AND phone = $4 LIMIT 1`,
-        [structureId, fn, ln, normalizedPhone],
-      );
-      return byPhone.rows[0] ?? null;
-    });
+    const patient = await withUserContext(req.authUser!, (client) =>
+      findDuplicatePatientRow(client, structureId, firstName, lastName, dateOfBirth, phone),
+    );
     res.json(patient);
   }),
 );
@@ -94,11 +113,23 @@ patientsRouter.get(
 );
 
 // POST /api/patients — miroir de createPatient() (id via generate_patient_id RPC)
+// Rejette la création si un patient identique (même nom + même date de
+// naissance, ou même nom + même téléphone) existe déjà pour l'établissement —
+// filet de sécurité serveur derrière le pré-contrôle /find-duplicate du
+// front, qui ne suffit pas seul contre une double soumission concurrente.
 patientsRouter.post(
   '/',
   asyncHandler(async (req, res) => {
+    const { structure_id, first_name, last_name, date_of_birth, phone } = req.body as Record<string, string>;
     const patient = await withUserContext(req.authUser!, async (client) => {
-      const { rows: idRows } = await client.query('SELECT generate_patient_id($1) AS id', [req.body.structure_id]);
+      const dup = await findDuplicatePatientRow(client, structure_id, first_name, last_name, date_of_birth, phone);
+      if (dup) {
+        throw Object.assign(
+          new Error(`Un patient identique existe déjà : ${dup.first_name} ${dup.last_name} (${dup.id}).`),
+          { status: 409, code: 'DUPLICATE_PATIENT', patient: dup },
+        );
+      }
+      const { rows: idRows } = await client.query('SELECT generate_patient_id($1) AS id', [structure_id]);
       const insert = buildInsert('patients', PATIENT_COLUMNS, { ...req.body, id: idRows[0].id });
       const { rows } = await client.query(insert.text, insert.values);
       return rows[0];
